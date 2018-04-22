@@ -1,28 +1,26 @@
 #include "Adafruit_GPS.h"
 #include <math.h>
+
 #define mySerial Serial1
-Adafruit_GPS GPS(&mySerial);
 #define GPSECHO  false
-boolean usingInterrupt = false;
 #define APP_VERSION 10
+
+Adafruit_GPS GPS(&mySerial);
+boolean usingInterrupt = false;
 byte bufferSize = 64;
 byte bufferIndex = 0;
 char buffer[65];
 char c;
 uint32_t timer;
+uint32_t timer2;
 int photoPin = A0;
 
 double convertDegMinToDecDeg (float degMin) {
   double min = 0.0;
   double decDeg = 0.0;
-
-  //get the minutes, fmod() requires double
-  min = fmod((double)degMin, 100.0);
-
-  //rebuild coordinates in decimal degrees
-  degMin = (int) ( degMin / 100 );
+  min = fmod((double)degMin, 100.0); //get the minutes, fmod() requires double
+  degMin = (int) ( degMin / 100 ); //rebuild coordinates in decimal degrees
   decDeg = degMin + ( min / 60 );
-
   return decDeg;
 }
 
@@ -37,6 +35,7 @@ void setup() {
   delay(1000);
   mySerial.println(PMTK_Q_RELEASE);
   timer = millis();
+  timer2 = millis();
   Spark.publish("GPS", "{ status: \"started up! "+String(APP_VERSION)+"\"}", 60, PRIVATE );
 
   IPAddress myIP = WiFi.localIP();
@@ -49,51 +48,17 @@ void setup() {
 }
 
 void loop() {
-  // in case you are not using the interrupt above, you'll
-  // need to 'hand query' the GPS, not suggested :(
   if (! usingInterrupt) {
-    // read data from the GPS in the 'main loop'
-    char c = GPS.read();
-    // if you want to debug, this is a good time to do it!
-    if (GPSECHO)
-      if (c) Serial.print(c);
+    // in case you are not using the interrupt above, you'll
+    // need to 'hand query' the GPS, not suggested :(
+    char c = GPS.read(); // read data from the GPS in the 'main loop'
   }
 
-  if (GPS.newNMEAreceived()) {
-    if (!GPS.parse(GPS.lastNMEA())) {
-      if (millis() - timer > 10000) {
-        Spark.publish("GPS", "{ last: \""+String(GPS.lastNMEA())+"\"}", 60, PRIVATE );
-        Spark.publish("GPS", "{ error: \"failed to parse\"}", 60, PRIVATE );
-      }
-      return;
-    }
-  }
-
-  if (timer > millis())  timer = millis();
+  if (timer > millis()) timer = millis();
+  if (timer2 > millis()) timer2 = millis();
 
   if (millis() - timer > 10000) {
     timer = millis(); // reset the timer
-
-    Spark.publish(
-      "GPS",
-      "{ lat: " + String(convertDegMinToDecDeg(GPS.latitude))
-      + ", lon: -" + String(convertDegMinToDecDeg(GPS.longitude))
-      + ", a: " + String(GPS.altitude)
-      + " }",
-      60,
-      PRIVATE
-    );
-
-    Spark.publish(
-      "GPS",
-      + "{ q: " + String(GPS.fixquality)
-      + ", s: " + String((int)GPS.satellites)
-      + " }",
-      60,
-      PRIVATE
-    );
-
-    Spark.publish("GPS_RAW", String(GPS.lastNMEA()), 60, PRIVATE );
 
     Spark.publish(
       "PHOTO",
@@ -101,5 +66,36 @@ void loop() {
       60,
       PRIVATE
     );
+
+    if (GPS.fixquality > 0 && (int)GPS.satellites > 0) {
+      Spark.publish(
+        "GPS",
+        "{ lat: " + String(convertDegMinToDecDeg(GPS.latitude))
+        + ", lon: -" + String(convertDegMinToDecDeg(GPS.longitude))
+        + ", a: " + String(GPS.altitude)
+        + " }",
+        60,
+        PRIVATE
+      );
+
+      if (millis() - timer2 > 120000) {
+        System.sleep(SLEEP_MODE_DEEP, 1200); // sleep for 20 minutes
+      }
+    } else {
+      Spark.publish(
+        "GPS",
+        + "{ q: " + String(GPS.fixquality)
+        + ", s: " + String((int)GPS.satellites)
+        + " }",
+        60,
+        PRIVATE
+      );
+
+      Spark.publish("GPS_RAW", String(GPS.lastNMEA()), 60, PRIVATE );
+
+      if (millis() - timer2 > 120000) {
+        System.sleep(SLEEP_MODE_DEEP, 120); // sleep for 2 minutes
+      }
+    }
   }
 }
