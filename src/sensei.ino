@@ -10,6 +10,7 @@ byte bufferIndex = 0;
 char buffer[65];
 char c;
 uint32_t timer;
+int photoPin = A0;
 
 double convertDegMinToDecDeg (float degMin) {
   double min = 0.0;
@@ -58,33 +59,24 @@ void loop() {
       if (c) Serial.print(c);
   }
 
-  // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences!
-    // so be very wary if using OUTPUT_ALLDATA and trytng to print out data
-    //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-
-    if (!GPS.parse(GPS.lastNMEA()))   {
-      // this also sets the newNMEAreceived() flag to false
+    if (!GPS.parse(GPS.lastNMEA())) {
       if (millis() - timer > 10000) {
         Spark.publish("GPS", "{ last: \""+String(GPS.lastNMEA())+"\"}", 60, PRIVATE );
         Spark.publish("GPS", "{ error: \"failed to parse\"}", 60, PRIVATE );
       }
-      return;  // we can fail to parse a sentence in which case we should just wait for another
+      return;
     }
   }
 
-  // if millis() or timer wraps around, we'll just reset it
   if (timer > millis())  timer = millis();
 
-  // approximately every 2 seconds or so, print out the current stats
   if (millis() - timer > 10000) {
     timer = millis(); // reset the timer
 
     Spark.publish(
       "GPS",
-      "{lat: " + String(convertDegMinToDecDeg(GPS.latitude))
+      "{ lat: " + String(convertDegMinToDecDeg(GPS.latitude))
       + ", lon: -" + String(convertDegMinToDecDeg(GPS.longitude))
       + ", a: " + String(GPS.altitude)
       + " }",
@@ -102,5 +94,12 @@ void loop() {
     );
 
     Spark.publish("GPS_RAW", String(GPS.lastNMEA()), 60, PRIVATE );
+
+    Spark.publish(
+      "PHOTO",
+      "{ photo: " + String(analogRead(photoPin)) + " }",
+      60,
+      PRIVATE
+    );
   }
 }
