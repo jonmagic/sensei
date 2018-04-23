@@ -4,7 +4,11 @@
 #define mySerial Serial1
 #define GPSECHO  false
 #define APP_VERSION 10
+#define PHOTO_PIN A0
+#include <dht11.h>
+#define DHT11_PIN 0
 
+dht11 DHT;
 Adafruit_GPS GPS(&mySerial);
 boolean usingInterrupt = false;
 byte bufferSize = 64;
@@ -13,7 +17,7 @@ char buffer[65];
 char c;
 uint32_t timer;
 uint32_t timer2;
-int photoPin = A0;
+int dhtValue;
 
 double convertDegMinToDecDeg (float degMin) {
   double min = 0.0;
@@ -53,6 +57,7 @@ void loop() {
     // need to 'hand query' the GPS, not suggested :(
     char c = GPS.read(); // read data from the GPS in the 'main loop'
   }
+  DHT.read(DHT11_PIN);
 
   if (timer > millis()) timer = millis();
   if (timer2 > millis()) timer2 = millis();
@@ -62,7 +67,14 @@ void loop() {
 
     Spark.publish(
       "PHOTO",
-      "{ photo: " + String(analogRead(photoPin)) + " }",
+      "{ photo: " + String(analogRead(PHOTO_PIN)) + " }",
+      60,
+      PRIVATE
+    );
+
+    Spark.publish(
+      "DHT",
+      "{ humidity: " + String(DHT.humidity) + ", temperature: " + String(DHT.temperature) + " }",
       60,
       PRIVATE
     );
@@ -94,7 +106,7 @@ void loop() {
       Spark.publish("GPS_RAW", String(GPS.lastNMEA()), 60, PRIVATE );
 
       if (millis() - timer2 > 120000) {
-        System.sleep(SLEEP_MODE_DEEP, 120); // sleep for 2 minutes
+        System.sleep(SLEEP_MODE_DEEP, 300); // sleep for 5 minutes
       }
     }
   }
